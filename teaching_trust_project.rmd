@@ -1,0 +1,152 @@
+---
+title: "Teaching Trust Assignment"
+author: "Tom"
+date: "May 4, 2018"
+output: html_document
+---
+
+# Goals for project
+
+Calculate percentage of students whose **STAAR reading scores** are:  
+
+* Approaching grade level
+    * Overall
+    * By school type (Elementary, middle, high school)
+    * By gender
+    * By race
+* Meets grade level
+    * Overall
+    * By school type (E, M, S)
+    * By gender
+    * By race
+* Create a graph    
+
+
+## Load Libraries
+
+```{r, message=F, warning=F}
+library(tidyverse)
+library(readxl)
+library(skimr)
+```
+
+## Load dataset
+
+From looking at the dataset on Google Drive, we can see that it is rectangular but has a LOT of columns. 
+
+```{r}
+# read in raw data
+raw_df <- read_excel("teach_trust.xlsx")
+
+# take a "look" at the data
+# we can see numbers
+head(raw_df)
+
+# since output is truncated, check for missing data
+skimr::n_missing(raw_df)
+
+# dimensions
+dim(raw_df)
+```
+It does in fact have a lot of dimension withs `r ncol(raw_df)` columns and `r nrow(raw_df)` rows. The data doesn't appear to have any missing data, but from looking at the data w/ `view(raw_df)` I do see quite a few rows with "." instead of a blank, NA, or 0. Also, vast majority of the columns are classed as character, but contain primarily numbers.
+
+Most importantly, there is data coded within EACH column. There are no repeats in the columns as we can see there are `r ncol(raw_df)` columns and `r length(unique(colnames(raw_df)))` unique columns. This breaks tidy data principles, so we will need to switch from a wide to tall data format while extracting these data codes from the column headers. 
+
+```{r}
+# compared ncol to number of unique columns
+ncol(raw_df) - length(unique(colnames(raw_df)))
+
+# GRDTYPE We have 4 outputs = gradetype B might = both? We will exclude as unknown
+unique(raw_df$GRDTYPE)
+```
+Ok so each column is unique, but looking at the TAPR website we can see that there are consistencies between each of the column headers. We'll define these below.
+
+## Column Meanings
+
+Each of the columns correspond to a coding schema.
+
+* First 4 chr = Race/Gender/Group
+* Next 5 characters = Subject
+* Next 2 character = Year
+* Final letter = N (Numerator), D (Denominator), R (Rate)
+
+While when we look at the codes, they are not PERFECTLY evened out, they all make sense as we have even amounts between years, equal grouping codes (race, gender, group), and equal N/D/R.
+
+```{r}
+# sanity check our codes
+group_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 1, stop = 4)
+
+subject_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 5, stop = 9)
+
+year_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 10, stop = 11)
+
+type_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 12, stop = 12)
+
+data.frame(x = group_code) %>% group_by(x) %>% count()
+
+data_frame(x = subject_code) %>% group_by(x) %>% count()
+
+data_frame(x = year_code) %>% group_by(x) %>% count()
+
+data_frame(x = type_code) %>% group_by(x) %>% count()
+
+list(grp = group_code, sub = subject_code, yr = year_code, type = type_code) %>% 
+    map(., unique) %>%
+    map(., data.frame) %>% 
+    writexl::write_xlsx(here::here("/output_data/unique_names.xlsx"))
+
+```
+You could always hard-code the labels (as started below), but for reproducibility, I have ouput the labels so we can form a "database" of subject codes. This could get rolled up into a package or be stored in database. I then attached the "labels" to match up with the code from STAAR data.
+
+```{r, eval = F}
+unique(group_code)
+group_labels <- c("All Students", "African-American", "White", "Hispanic", "American-Indian", "Two or More Races", "Asian", "Pacific-Islander", "Female", "Male", "Econ Disadv", "Special Ed", "At risk", "ELL")
+
+```
+I ran into a slight snag as some of the groups are not listed in the database we were provided with. All the reading scores are in the database, but a few of the codes (ARO30 and ARO3A) within our dataset are missing from the database of what the codes mean on the STAAR website. We'll filter to find the rows of interest when we gather our dataframe.
+
+## Filter reading scores
+
+```{r}
+gather_df <- raw_df %>% 
+    gather(code, number_of_students, -CAMPUS, -GRDTYPE) %>% 
+    filter(!str_detect(code, "AR030"), !str_detect(code, "AR03A"), GRDTYPE != "B") %>% 
+    rename(campus = CAMPUS, grdtype = GRDTYPE) %>% 
+    mutate(group_code = substr(code, start = 1, stop = 4), # since the code is consistent
+           subject_code = substr(code, start = 5, stop = 9), # we can extract specific strings by location
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), # from each of the areas of interest
+           type_code = substr(code, start = 12, stop = 12))
+```
+
+
+
+```{r}
+group_labels <- read_excel(here::here("/output_data/unique_names.xlsx"), sheet = 1)
+subject_labels <- read_excel(here::here("/output_data/unique_names.xlsx"), sheet = 2)
+type_labels <- read_excel(here::here("/output_data/unique_names.xlsx"), sheet = 4)
+```
+
+```{r}
+clean_df <- gather_df %>% 
+    left_join(group_labels, by = "group_code") %>% 
+    left_join(subject_labels, by = "subject_code") %>% 
+    left_join(type_labels, by = "type_code") %>% 
+    select(-code, -c(group_code:subject_code, type_code), year = year_code) %>% 
+    mutate_at(vars(grdtype, group_label, subject_label, type_label), factor) %>% 
+    mutate(number_of_students = as.numeric(number_of_students))
+```
+
+
+
+
+```{r}
+unique(clean_df$subject_label)
+clean_df %>% 
+    
+```
+
+
