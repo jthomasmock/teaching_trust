@@ -1,0 +1,110 @@
+---
+title: "03_staar_2016_2017_tables_plots"
+author: "Tom"
+date: "May 7, 2018"
+output: html_document
+---
+
+# Goals for project
+
+Calculate percentage of students whose **STAAR reading scores** are:  
+
+* Approaching grade level
+    * Overall
+    * By school type (Elementary, middle, high school)
+    * By gender
+    * By race
+* Meets grade level
+    * Overall
+    * By school type (E, M, S)
+    * By gender
+    * By race
+* Create a graph    
+
+### Load Libraries
+
+```{r, echo = F}
+# load libraries
+library(tidyverse)
+library(readxl)
+library(here)
+library(writexl)
+```
+
+## Read in data
+
+```{r}
+# read in clean, formatted data
+approach_df <- readRDS(here("output_data/approach_df.rds"))
+meeting_df <- readRDS(here("output_data/meeting_df.rds"))
+```
+
+## Generate summaries by group
+
+```{r}
+unique(approach_df$group_code)
+approaching_summary <- approach_df %>% 
+    filter(group_code != "American Indian", group_code != "Pacific Islander") %>% 
+    group_by(gradetype, group_code, year_code) %>% 
+    add_tally() %>% 
+    group_by(gradetype, group_code, year_code, n) %>% 
+    summarize(mean = mean(rate, na.rm = T), sd = sd(rate, na.rm = T))
+
+meeting_summary <- meeting_df %>% 
+    group_by(gradetype, group_code, year_code) %>% 
+    filter(group_code != "American Indian", group_code != "Pacific Islander") %>% 
+    add_tally() %>% 
+    group_by(gradetype, group_code, year_code, n) %>% 
+    summarize(mean = mean(rate, na.rm = T), sd = sd(rate, na.rm = T))
+```
+
+```{r}
+ggplot(approaching_summary, aes(x = fct_reorder(group_code, mean), y = mean)) +
+    geom_col() +
+    geom_errorbar((aes(ymin = mean, ymax = mean + sd))) +
+    coord_flip() +
+    facet_grid(year_code~gradetype) +
+    scale_y_continuous(labels = scales::percent) +
+    labs(x = "", 
+         y = "Approaching Grade Level for Reading (%)")
+
+ggplot(meeting_summary, aes(x = fct_reorder(group_code, mean), y = mean)) +
+    geom_col() +
+    geom_errorbar((aes(ymin = mean, ymax = mean + sd))) +
+    coord_flip() +
+    facet_grid(year_code~gradetype) +
+    scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2)) +
+    labs(x = "", 
+         y = "\nMeeting Grade Level for Reading (%)",
+         title = "There is a distinct achievement gap for ")
+    
+```
+
+```{r}
+ggplot(filter(approaching_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian", "Two or More Races")), aes(x = year_code, y = mean, color = group_code, group = group_code)) +
+    geom_path() +
+    geom_point(size = 3) +
+    facet_grid(~gradetype) +
+    scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), limits = c(0, 1)) +
+    labs(x = "", 
+         y = "\nMeeting Grade Level for Reading (%)",
+         title = "There is a distinct achievement gap for ")
+
+levels(meeting_df$group_code)
+
+
+
+filter(meeting_summary, !group_code %in% c() "Hispanic")
+```
+
+```{r}
+ggplot(filter(meeting_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian", "Two or More Races")), aes(x = year_code, y = mean, color = group_code, group = group_code)) +
+    geom_path() +
+    geom_point(size = 3) +
+    facet_grid(~gradetype) +
+    scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), limits = c(0, 1)) +
+    labs(x = "", 
+         y = "\nMeeting Grade Level for Reading (%)",
+         title = "There is a distinct achievement gap for ")
+```
+

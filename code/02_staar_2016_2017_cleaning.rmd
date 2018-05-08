@@ -1,0 +1,203 @@
+---
+title: "02_staar_2016_2017_cleaning"
+author: "Tom"
+date: "May 7, 2018"
+output: html_document
+---
+
+
+## Goals
+
+* Properly code NA values
+* Convert from wide to tall format
+* Assign descriptive labels to factors
+* Split into datasets (approaching vs meeting)
+
+```{r, echo = F}
+# load libraries
+library(tidyverse)
+library(readxl)
+library(here)
+library(writexl)
+```
+
+```{r}
+# read in raw data
+raw_df <- read_excel(here("raw_data/teach_trust.xlsx"))
+
+# read in the group_labels from our "database"
+group_labels <- read_excel(here("output_data/code_database.xlsx"))
+
+raw_df # again notice there are negative values and "."
+```
+
+
+### Properly code NAs
+
+```{r}
+# negative students doesn't make sense to me
+# and likely are a mistake or potentially a NA?
+raw_df[raw_df == "-1"] <- NA
+
+# "."" likely means missing data
+raw_df[raw_df == "."] <- NA
+
+# sanity check data - Looks good there are now NAs instead of . or negative numbers
+raw_df
+```
+## Tidy up the data
+
+We need to generate reading scores for Meeting and Approaching Grade level. We will be excluding grade type == B as this is an unknown. We know E, M, and S. B could equal *both?* but excluding as unknown. I'll also split out the specific codes of interest rather than keeping them as one long code. Eg race/gender will be seperate from subject and year.
+
+## Meeting grade level data
+
+I wrote a function to take care of the vast majority of our data tidying. We'll create data subsets for the Numerator, Denominator, and Rate 
+
+```{r}
+
+# function does vast majority of our consistent tidying in a single chain
+tall_function <- function(type, subject) {
+    raw_df %>% 
+    # select only the columns ending with type of interest (N/D/R)
+    select(CAMPUS, GRDTYPE, ends_with(type)) %>%
+    # lowercase these names
+    rename(campus = CAMPUS, gradetype = GRDTYPE) %>%
+    # gather the data from wide to tall
+    gather(code, number_of_students, -campus, -gradetype) %>% 
+    # exclude B grade and find classes that match subject of interest
+    filter(str_detect(code, subject), gradetype != "B") %>%
+    # since the code is consistent we can extract specific strings by location
+    # from each of the codes of interest
+    mutate(group_code = substr(code, start = 1, stop = 4),   
+           subject_code = substr(code, start = 5, stop = 9), 
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), 
+           type_code = substr(code, start = 12, stop = 12)) %>%
+    mutate_at(vars(group_code, subject_code, year_code, type_code), str_trim) %>% 
+    mutate(group_code = factor(group_code, levels = group_labels$group_code, labels = group_labels$group_labels),
+           number_of_students = as.numeric(number_of_students),
+           year_code = factor(year_code),
+           gradetype = factor(gradetype, levels = c("E", "M", "S"), labels = c("Elementary", "Middle-school", "Secondary")))
+}
+
+# meeting grade level denominator
+meet_denom <- tall_function("D", "AR042") 
+
+# meeting grade level numerator
+meet_num <- tall_function("N", "AR042") 
+
+# meeting grade level rate
+meet_rate <- tall_function("R", "AR042")
+
+# sanity check the dimensions
+list(meet_denom, meet_num, meet_rate) %>% 
+    map(., dim)
+
+# Dimensions look good -- should be 6664 x 8, original raw_df was 6664
+```
+
+## Join the meeting dataframes into one master
+
+Using `dplyr::inner_joins` we will merge the numerator, denominator, and rate dataframes to compare and generate a master dataframe. For some reason I am still seeing negative values for some districts, so we will filtering only students that are > 0. I don't see a situation where you can have negative students in the denominator (maybe leaving school?) but regardless I am making the assumption it is a clerical error and will be excluding it.
+
+```{r}
+
+meeting_df <- inner_join(meet_num, meet_denom, by = c("campus", "gradetype", "year_code", "group_code", "subject_code")) %>% 
+    rename(numer_students = number_of_students.x, denom_students = number_of_students.y) %>% 
+    select(-ends_with(".y"), - ends_with(".x")) %>% 
+    inner_join(meet_rate, by = c("campus", "gradetype", "year_code", "group_code", "subject_code")) %>% 
+    filter(numer_students > 0, denom_students > 0) %>% 
+    mutate(rate = numer_students/denom_students,
+           given_rate = number_of_students/100) %>% 
+    select(-number_of_students)
+
+ 
+# sanity check the rate vs given rate from the dataset
+meeting_df %>% 
+    mutate(sanity_check = round(rate - given_rate, digits = 3)) %>%
+    arrange(desc(sanity_check))
+
+```
+
+```{r}
+meet_rate %>% 
+  group_by(group_code, gradetype, year_code) %>% 
+  summarize(mean = mean(number_of_students, na.rm = T)) %>% 
+  ungroup %>% 
+  #mutate(group_code = factor(group_code, labels = group_labels)) %>% 
+  ggplot(aes(x = forcats::fct_reorder(group_code, mean), y = mean, group = group_code, color = year_code)) +
+  geom_point() +
+  coord_flip() +
+  facet_grid(~gradetype)
+  
+```
+
+
+## Approaching grade level data
+
+I am using our previously defined function to take care of the vast majority of our data tidying. We'll create data subsets for the Numerator, Denominator, and Rate. 
+
+```{r}
+
+# meeting grade level denominator
+approach_denom <- tall_function("D", "AR01") 
+
+# meeting grade level numerator
+approach_num <- tall_function("N", "AR01") 
+
+# meeting grade level rate
+approach_rate <- tall_function("R", "AR01")
+
+# sanity check the dimensions
+list(approach_denom, approach_num, approach_rate) %>% 
+    map(., dim)
+
+# Dimensions look good -- should be 6664 x 8, original raw_df was 6664
+```
+
+## Join the approach dataframes into one master
+
+Using `dplyr::inner_joins` we will merge the numerator, denominator, and rate dataframes to compare and generate a master dataframe. For some reason I am still seeing negative values for some districts, so we will filtering only students that are > 0. I don't see a situation where you can have negative students in the denominator (maybe leaving school?) but regardless I am making the assumption it is a clerical error and will be excluding it. Importantly, the `subject_code` does not match between 2016 and 2017 but as far as I can tell it represents the same thing (reading) but regardless we will not join on it as it will prevent them from joining at all.
+
+```{r}
+# join the dataframe, filter students > 0, and calculate rate
+approach_df <- inner_join(approach_num, approach_denom, by = c("campus", "gradetype", "year_code", "group_code")) %>% 
+    rename(numer_students = number_of_students.x, denom_students = number_of_students.y) %>% 
+    select(-ends_with(".y"), - ends_with(".x")) %>% 
+    inner_join(approach_rate, by = c("campus", "gradetype", "year_code", "group_code")) %>% 
+    filter(numer_students > 0, denom_students > 0) %>% 
+    mutate(rate = numer_students/denom_students,
+           given_rate = number_of_students/100) %>% 
+    select(-number_of_students)
+
+ 
+# sanity check the rate vs given rate from the dataset
+approach_df %>% 
+    mutate(sanity_check = round(rate - given_rate, digits = 3)) %>%
+    arrange(desc(sanity_check))
+
+```
+
+```{r}
+approach_rate %>% 
+  group_by(group_code, gradetype, year_code) %>% 
+  summarize(mean = mean(number_of_students, na.rm = T)) %>% 
+  ungroup %>% 
+  #mutate(group_code = factor(group_code, labels = group_labels)) %>% 
+  ggplot(aes(x = forcats::fct_reorder(group_code, mean), y = mean, group = group_code, color = year_code)) +
+  geom_point() +
+  coord_flip() +
+  facet_grid(~gradetype)
+  
+```
+### Save the clean data
+
+We will save this clean data as both RDS and as excel file.
+
+```{r}
+saveRDS(approach_df, here("/output_data/approach_df.rds"))
+saveRDS(meeting_df, here("/output_data/meeting_df.rds"))
+
+list(approaching = approach_df, meeting = meeting_df) %>% 
+    writexl::write_xlsx(here("/output_data/clean_df.xlsx"))
+```
+

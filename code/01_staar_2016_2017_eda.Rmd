@@ -1,0 +1,130 @@
+---
+title: "01_staar_2016_2017_eda"
+author: "Tom"
+date: "May 4, 2018"
+output: html_document
+---
+
+# Goals for project
+
+Calculate percentage of students whose **STAAR reading scores** are:  
+
+* Approaching grade level
+    * Overall
+    * By school type (Elementary, middle, high school)
+    * By gender
+    * By race
+* Meets grade level
+    * Overall
+    * By school type (E, M, S)
+    * By gender
+    * By race
+* Create a graph    
+
+
+## Load Libraries
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(skimr)
+```
+
+## Load dataset
+
+From looking at the dataset on Google Drive, we can see that it is rectangular but has a LOT of columns. 
+
+```{r}
+# read in raw data
+raw_df <- read_excel(here("raw_data/teach_trust.xlsx"))
+
+# take a "look" at the data -- SUPER wide
+head(raw_df)
+
+# since output is truncated, check for missing data
+skimr::n_missing(raw_df)
+
+# dimensions
+dim(raw_df)
+```
+It does in fact have a lot of dimension with `r ncol(raw_df)` columns and `r nrow(raw_df)` rows. According to `skimr` there doesn't appear to be any missing data, but from looking at the data w/ `view(raw_df)` I do see quite a few rows with "." and some with -1 instead of a blank, NA, or 0. I'm assuming -1 is a mistake or possibly a way that they are encoding NAs? Not quite sure, but we'll replace negative values with NA and "." with NAs. Also, vast majority of the columns are classed as character, but contain primarily numbers. This is likely due to some data being encoded as "." and forcing R to read as character.
+
+Most importantly, there is data coded within each column header. There are no repeats in the columns as we can see there are `r ncol(raw_df)` columns and `r length(unique(colnames(raw_df)))` unique columns. This breaks `tidy` data principles, so we will need to switch from a wide to tall data format while extracting these data codes from the column headers. 
+
+```{r}
+# compared ncol to number of unique columns
+ncol(raw_df) - length(unique(colnames(raw_df)))
+
+# GRDTYPE We have 4 outputs = gradetype B might = both? We will exclude B as unknown
+# S = secondary, M = middleschool, E = elementary
+unique(raw_df$GRDTYPE)
+```
+Ok so each column is unique, but looking at the TAPR website we can see that there are consistencies between each of the column headers. We'll define these below.
+
+## Column Meanings
+
+Each of the columns correspond to a coding schema.
+
+* First 4 chr = Race/Gender/Group
+* Next 5 characters = Subject
+* Next 2 character = Year
+* Final letter = N (Numerator), D (Denominator), R (Rate)
+
+When we look at the codes, they are not PERFECTLY evened out, but they all make sense as we have even amounts between years, equal grouping codes (race, gender, group), and equal N/D/R. At this point we are only interested in reading, but by extracting out the various codes we could store for developing a `dplyr::join` pseudo-database to ease pain of manually assigning group/subject labels in the future. I'm assuming that N = Numerator, which means that N = number of students achieving X, while D = total number of students that COULD achieve X. R might = the percentage, eg N/D, but we will check this before just accepting as truth.
+
+```{r}
+# create vectors of each of the codes within the column names
+group_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 1, stop = 4)
+
+subject_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 5, stop = 9)
+
+year_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 10, stop = 11)
+
+type_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 12, stop = 12)
+
+# sanity check our codes
+
+count_function <- function(code_input){
+    data.frame(x = code_input) %>% 
+        group_by(x) %>% 
+        count()
+}
+
+# put in list for purrr::map
+code_check <- list(grp = group_code, sub = subject_code, yr = year_code, type = type_code)
+
+check_output <- map(code_check, count_function)
+check_output
+
+
+check_output %>% 
+    map(., unique) %>%
+    map(., data.frame) %>% 
+    writexl::write_xlsx("unique_names.xlsx")
+
+```
+
+## Codes of Interest
+
+AR04216 and 17 = N/R/D meeting reading requirement
+
+AR01S16 and AR01S17 = N/R Index 1 - approaching grade level standards
+AR01016 and AR01017 = D Index 1 - approaching totals, but 3-11 for 16 and 3-12 for 17. 
+
+I'm going to assume that since both are index 1 and have almost identical coding that they should reflect the same thing, even though there is a year by year difference in which grades are recorded.
+
+You could always hard-code the labels (as done below), but for reproducibility, I have ouput the labels so we can form a "database" of subject codes. This could get also rolled up into a package or be stored in database. I then attached the "labels" to match up with the code from STAAR data/website. For the sake of this assignment, I will be using these hard-coded labels as some of the grouping characteristics present in the dataset are not present in the codebook provided.
+
+```{r}
+unique(group_code)
+group_labels <- c("All Students", "African-American", "White", "Hispanic", "American-Indian", "Two or More Races", "Asian", "Pacific-Islander", "Female", "Male", "Econ Disadv", "Special Ed", "At risk", "ELL")
+
+```
+
+Again, I ran into a slight snag as some of the groups are not listed in the database we were provided with. All the reading scores are in the database, but a few of the codes (ARO30 and ARO3A) within our dataset are missing from the database of what the codes mean on the STAAR website. We'll be filtering to find just the rows of interest anyway for reading when we gather our dataframe for this assignment.
+
+I am comfortable with exploratory data analysis, we'll take a shot at cleaning up the data now.
