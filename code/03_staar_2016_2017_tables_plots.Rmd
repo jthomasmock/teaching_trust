@@ -29,6 +29,9 @@ library(tidyverse)
 library(readxl)
 library(here)
 library(writexl)
+library(ggalt)
+library(kableExtra)
+library(hrbrthemes)
 ```
 
 ## Read in data
@@ -42,35 +45,128 @@ meeting_df <- readRDS(here("output_data/meeting_df.rds"))
 ## Generate summaries by group
 
 ```{r}
-unique(approach_df$group_code)
 approaching_summary <- approach_df %>% 
     filter(group_code != "American Indian", group_code != "Pacific Islander") %>% 
     group_by(gradetype, group_code, year_code) %>% 
     add_tally() %>% 
     group_by(gradetype, group_code, year_code, n) %>% 
-    summarize(mean = mean(rate, na.rm = T), sd = sd(rate, na.rm = T))
+    summarize(percent_approaching = mean(rate, na.rm = T),
+              raw_sum = sum(denom_students, na.rm = T))
 
 meeting_summary <- meeting_df %>% 
     group_by(gradetype, group_code, year_code) %>% 
     filter(group_code != "American Indian", group_code != "Pacific Islander") %>% 
     add_tally() %>% 
     group_by(gradetype, group_code, year_code, n) %>% 
-    summarize(mean = mean(rate, na.rm = T), sd = sd(rate, na.rm = T))
+    summarize(percent_meeting = mean(rate, na.rm = T),
+              raw_sum = sum(denom_students, na.rm = T))
+```
+
+## Create meeting tables
+
+We will create some changes that are not ideal for raw data but are much more readable for tables. We'll save the output into a master excel sheet and then also generate some local html tables to view the data.
+
+```{r}
+meeting_table_group <- meeting_summary %>% 
+    filter(group_code %in% c("All Students", "Male", "Female", "Econ Disadv", "Special Ed", "At Risk", "ELL")) %>%
+    mutate(percent_meeting = scales::percent(percent_meeting)) %>% 
+    rename(`Grade-type` = gradetype,
+           Group = group_code,
+           Year = year_code,
+           `Number of Districts` = n,
+        `Meeting Grade Level (%)`= percent_meeting,
+           `Total Students taking STAAR` = raw_sum) %>%
+    ungroup() 
+meeting_table_group %>% 
+    kable(., "html", caption = "Table 1. Students meeting STAAR Grade Reading level by Group, Grade-type, and Year") %>% 
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+meeting_table_race <- meeting_summary %>% 
+    filter(!group_code %in% c("All Students", "Male", "Female", "Econ Disadv", "Special Ed", "At Risk", "ELL")) %>%
+    mutate(percent_meeting = scales::percent(percent_meeting)) %>% 
+    rename(`Grade-type` = gradetype, 
+           Group = group_code,
+           Year = year_code,
+           `Number of Districts` = n,
+            `Meeting Grade Level (%)`= percent_meeting,
+           `Total Students taking STAAR` = raw_sum) %>%
+    ungroup() 
+
+meeting_table_race %>% 
+    kable(., "html", caption = "Table 1. Students meeting STAAR Grade Reading level by Race, Grade-type, and Year") %>% 
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+```
+
+## Create approaching tables
+
+
+```{r}
+approaching_table_group <- approaching_summary %>% 
+    filter(group_code %in% c("All Students", "Male", "Female", "Econ Disadv", "Special Ed", "At Risk", "ELL")) %>%
+    mutate(percent_approaching = scales::percent(percent_approaching)) %>% 
+    rename(`Grade-type` = gradetype,
+           Group = group_code,
+           Year = year_code,
+           `Number of Districts` = n,
+        `Approaching Grade Level (%)`= percent_approaching,
+           `Total Students taking STAAR` = raw_sum) %>%
+    ungroup() 
+
+
+
+approaching_table_race <- approaching_summary %>% 
+    filter(!group_code %in% c("All Students", "Male", "Female", "Econ Disadv", "Special Ed", "At Risk", "ELL")) %>%
+    mutate(percent_approaching = scales::percent(percent_approaching)) %>% 
+    rename(`Grade-type` = gradetype, 
+           Group = group_code,
+           Year = year_code,
+           `Number of Districts` = n,
+        `Approaching Grade Level (%)`= percent_approaching,
+           `Total Students taking STAAR` = raw_sum) %>%
+    ungroup() 
 ```
 
 ```{r}
-ggplot(approaching_summary, aes(x = fct_reorder(group_code, mean), y = mean)) +
+table_group <- left_join(approaching_table_group, meeting_table_group, by = c("Grade-type", "Group", "Year")) %>% 
+    select(`Grade-type`:Year,
+           `Meeting Grade Level (%)`,
+           `Approaching Grade Level (%)`, 
+           `Number of Districts.x`, 
+           `Total Students taking STAAR.x`, -ends_with(".y")) %>% 
+    rename(`Total Students taking STAAR` = `Total Students taking STAAR.x`, `Number of Districts` = `Number of Districts.x`)
+
+table_group %>% 
+    kable(., "html", caption = "Table 1. STAAR Reading level by Group, Grade-type, and Year") %>% 
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+table_race <- left_join(approaching_table_race, meeting_table_race, by = c("Grade-type", "Group", "Year")) %>% 
+    select(`Grade-type`:Year, 
+           `Meeting Grade Level (%)`,
+           `Approaching Grade Level (%)`,
+           `Number of Districts.x`, 
+           `Total Students taking STAAR.x`, -ends_with(".y")) %>% 
+    rename(`Total Students taking STAAR` = `Total Students taking STAAR.x`, `Number of Districts` = `Number of Districts.x`)
+
+table_race %>% 
+    kable(., "html", caption = "Table 1. STAAR Reading level by Race, Grade-type, and Year") %>% 
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+
+
+
+```{r}
+ggplot(approaching_summary, aes(x = fct_reorder(group_code, percent_approaching), y = percent_approaching)) +
     geom_col() +
-    geom_errorbar((aes(ymin = mean, ymax = mean + sd))) +
     coord_flip() +
     facet_grid(year_code~gradetype) +
     scale_y_continuous(labels = scales::percent) +
     labs(x = "", 
          y = "Approaching Grade Level for Reading (%)")
 
-ggplot(meeting_summary, aes(x = fct_reorder(group_code, mean), y = mean)) +
+ggplot(meeting_summary, aes(x = fct_reorder(group_code, percent_meeting), y = percent_meeting)) +
     geom_col() +
-    geom_errorbar((aes(ymin = mean, ymax = mean + sd))) +
     coord_flip() +
     facet_grid(year_code~gradetype) +
     scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2)) +
@@ -81,7 +177,7 @@ ggplot(meeting_summary, aes(x = fct_reorder(group_code, mean), y = mean)) +
 ```
 
 ```{r}
-ggplot(filter(approaching_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian", "Two or More Races")), aes(x = year_code, y = mean, color = group_code, group = group_code)) +
+ggplot(filter(approaching_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian")), aes(x = year_code, y = percent_approaching, color = group_code, group = group_code)) +
     geom_path() +
     geom_point(size = 3) +
     facet_grid(~gradetype) +
@@ -92,19 +188,18 @@ ggplot(filter(approaching_summary, as.character(group_code) %in% c("African Amer
 
 levels(meeting_df$group_code)
 
-
-
-filter(meeting_summary, !group_code %in% c() "Hispanic")
 ```
 
 ```{r}
-ggplot(filter(meeting_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian", "Two or More Races")), aes(x = year_code, y = mean, color = group_code, group = group_code)) +
+ggplot(filter(meeting_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian", "Two or More Races")), aes(x = year_code, y = percent_meeting, color = group_code, group = group_code)) +
     geom_path() +
     geom_point(size = 3) +
     facet_grid(~gradetype) +
     scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), limits = c(0, 1)) +
     labs(x = "", 
          y = "\nMeeting Grade Level for Reading (%)",
-         title = "There is a distinct achievement gap for ")
+         title = "There is a distinct achievement gap for ") +
+    ggthemes::theme_fivethirtyeight() +
+    scale_color_ipsum()
 ```
 
