@@ -1,0 +1,308 @@
+---
+title: "Teaching Trust Assignment"
+author: "Tom"
+date: "May 4, 2018"
+output: html_document
+---
+
+# Goals for project
+
+Calculate percentage of students whose **STAAR reading scores** are:  
+
+* Approaching grade level
+    * Overall
+    * By school type (Elementary, middle, high school)
+    * By gender
+    * By race
+* Meets grade level
+    * Overall
+    * By school type (E, M, S)
+    * By gender
+    * By race
+* Create a graph    
+
+
+##
+
+AR04216 and 17 = N/R/D meeting reading requirement
+
+AR01S16 and AR01S17 = N/R Index 1 - approaching grade level standards
+AR01016 and AR01017 = D Index 1 - approaching totals, but 3-11 for 16 and 3-12 for 17. 
+
+## Load Libraries
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(skimr)
+```
+
+```{r}
+write.csv(colnames(raw_df),"names.csv")
+```
+
+
+## Load dataset
+
+From looking at the dataset on Google Drive, we can see that it is rectangular but has a LOT of columns. 
+
+```{r}
+# read in raw data
+raw_df <- read_excel("teach_trust.xlsx")
+
+# take a "look" at the data -- SUPER wide
+head(raw_df)
+
+# since output is truncated, check for missing data
+skimr::n_missing(raw_df)
+
+# dimensions
+dim(raw_df)
+```
+It does in fact have a lot of dimension with `r ncol(raw_df)` columns and `r nrow(raw_df)` rows. The data doesn't appear to have any missing data, but from looking at the data w/ `view(raw_df)` I do see quite a few rows with "." and some with -1 instead of a blank, NA, or 0. I'm assuming -1 is a mistake or possibly a way that they are encoding NAs? Not quite sure, but we'll replace negative values with NA and "." with NAs. Also, vast majority of the columns are classed as character, but contain primarily numbers. This is likely due to some data being encoded as "." and forcing R to read as character.
+
+Most importantly, there is data coded within each column header. There are no repeats in the columns as we can see there are `r ncol(raw_df)` columns and `r length(unique(colnames(raw_df)))` unique columns. This breaks `tidy` data principles, so we will need to switch from a wide to tall data format while extracting these data codes from the column headers. 
+
+```{r}
+# compared ncol to number of unique columns
+ncol(raw_df) - length(unique(colnames(raw_df)))
+
+# GRDTYPE We have 4 outputs = gradetype B might = both? We will exclude B as unknown
+# S = secondary, M = middleschool, E = elementary
+unique(raw_df$GRDTYPE)
+```
+Ok so each column is unique, but looking at the TAPR website we can see that there are consistencies between each of the column headers. We'll define these below.
+
+## Column Meanings
+
+Each of the columns correspond to a coding schema.
+
+* First 4 chr = Race/Gender/Group
+* Next 5 characters = Subject
+* Next 2 character = Year
+* Final letter = N (Numerator), D (Denominator), R (Rate)
+
+When we look at the codes, they are not PERFECTLY evened out, but they all make sense as we have even amounts between years, equal grouping codes (race, gender, group), and equal N/D/R. At this point we are only interested in reading, but by extracting out the various codes we could store for developing a `dplyr::join` pseudo-database to ease pain of manually assigning group/subject labels in the future. I'm assuming that N = Numerator, which means that N = number of students achieving X, while D = total number of students that COULD achieve X. R might = the percentage, eg N/D, but we will check this before just accepting as truth.
+
+```{r}
+# create vectors of each of the codes within the column names
+group_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 1, stop = 4)
+
+subject_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 5, stop = 9)
+
+year_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 10, stop = 11)
+
+type_code <- colnames(select(raw_df, -c(CAMPUS, GRDTYPE))) %>% 
+    substr(start = 12, stop = 12)
+
+# sanity check our codes
+
+count_function <- function(code_input){
+    data.frame(x = code_input) %>% 
+        group_by(x) %>% 
+        count()
+}
+
+code_check <- list(grp = group_code, sub = subject_code, yr = year_code, type = type_code)
+
+check_output <- map(code_check, count_function)
+check_output$grp
+
+
+list(grp = group_code, sub = subject_code, yr = year_code, type = type_code) %>% 
+    map(., unique) %>%
+    map(., data.frame) %>% 
+    writexl::write_xlsx("unique_names.xlsx")
+
+```
+You could always hard-code the labels (as started below), but for reproducibility, I have ouput the labels so we can form a "database" of subject codes. This could get rolled up into a package or be stored in database. I then attached the "labels" to match up with the code from STAAR data/website. For the sake of this assignment, I will be using these hard-coded labels as some of the grouping characteristics present in the dataset are not present in the codebook provided.
+
+```{r}
+unique(group_code)
+group_labels <- c("All Students", "African-American", "White", "Hispanic", "American-Indian", "Two or More Races", "Asian", "Pacific-Islander", "Female", "Male", "Econ Disadv", "Special Ed", "At risk", "ELL")
+
+```
+
+Again, I ran into a slight snag as some of the groups are not listed in the database we were provided with. All the reading scores are in the database, but a few of the codes (ARO30 and ARO3A) within our dataset are missing from the database of what the codes mean on the STAAR website. We'll be filtering to find just the rows of interest for reading when we gather our dataframe for this assignment.
+
+
+# select only reading columns for meeting
+
+```{r}
+raw_df[raw_df == -1] <- NA
+raw_df[raw_df == "."] <- NA
+raw_df
+```
+
+
+
+```{r}
+group_code_levels <- unique(rate_df$group_code)
+gather_df %>% head()
+    
+```
+
+
+ ## Meeting grade level data
+```{r}
+unique(rate_df$group_code)
+denom <- raw_df %>% 
+  select(CAMPUS, GRDTYPE, ends_with("D")) %>% 
+    gather(code, number_of_students, -CAMPUS, -GRDTYPE) %>% 
+    filter(str_detect(code, "AR042"), GRDTYPE != "B") %>% 
+    mutate(group_code = substr(code, start = 1, stop = 4), # since the code is consistent
+           subject_code = substr(code, start = 5, stop = 9), # we can extract specific strings by location
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), # from each of the areas of interest
+           type_code = substr(code, start = 12, stop = 12)) %>% 
+  rename(total_students = number_of_students)
+
+numer <- raw_df %>% 
+  select(CAMPUS, GRDTYPE, ends_with("N")) %>% 
+    gather(code, number_of_students, -CAMPUS, -GRDTYPE) %>% 
+    filter(str_detect(code, "AR042"), GRDTYPE != "B") %>% 
+    mutate(group_code = substr(code, start = 1, stop = 4), # since the code is consistent
+           subject_code = substr(code, start = 5, stop = 9), # we can extract specific strings by location
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), # from each of the areas of interest
+           type_code = substr(code, start = 12, stop = 12)) %>% 
+    rename(meet_students = number_of_students)
+
+rate_df <- raw_df %>% 
+  select(CAMPUS, GRDTYPE, ends_with("R")) %>% 
+    gather(code, number_of_students, -CAMPUS, -GRDTYPE) %>% 
+    filter(str_detect(code, "AR042"), GRDTYPE != "B") %>% 
+    mutate(group_code = substr(code, start = 1, stop = 4), # since the code is consistent
+           subject_code = substr(code, start = 5, stop = 9), # we can extract specific strings by location
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), # from each of the areas of interest
+           type_code = substr(code, start = 12, stop = 12)) %>% 
+  mutate(group_code = factor(group_code, levels = group_code_levels, labels = group_labels))
+
+rate_df
+```
+
+```{r}
+rate_df %>% 
+  mutate(number_of_students = as.numeric(number_of_students)) %>%
+  #na.omit() %>% 
+  group_by(group_code, GRDTYPE) %>% 
+  summarize(mean = mean(number_of_students, na.rm = T)) %>% 
+  ungroup %>% 
+  #mutate(group_code = factor(group_code, labels = group_labels)) %>% 
+  ggplot(aes(x = forcats::fct_reorder(group_code, mean), y = mean, group = group_code)) +
+  geom_point() +
+  coord_flip() +
+  facet_grid(~GRDTYPE)
+  
+```
+
+
+# Approaching data
+
+AR01S
+```{r}
+approach_rate_df <- raw_df %>% 
+  select(CAMPUS, GRDTYPE, ends_with("R")) %>% 
+    gather(code, number_of_students, -CAMPUS, -GRDTYPE) %>% 
+    filter(str_detect(code, "AR01"), GRDTYPE != "B") %>% 
+    mutate(group_code = substr(code, start = 1, stop = 4), # since the code is consistent
+           subject_code = substr(code, start = 5, stop = 9), # we can extract specific strings by location
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), # from each of the areas of interest
+           type_code = substr(code, start = 12, stop = 12)) %>% 
+  mutate(group_code = factor(group_code, levels = group_code_levels, labels = group_labels),
+         year = factor(year_code))
+
+    
+unique(approach_rate_df$year)    
+approach_rate_df
+```
+
+```{r}
+approach_rate_df %>% 
+  mutate_at(vars(number_of_students, year_code), as.numeric) %>%
+  #na.omit() %>% 
+  group_by(group_code, GRDTYPE, year) %>% 
+  summarize(mean = mean(number_of_students, na.rm = T)) %>% 
+  ungroup() %>% 
+  #head()
+  #mutate(group_code = factor(group_code, levelabels = group_labels)) %>% 
+  ggplot(aes(x = forcats::fct_reorder(group_code, mean), y = mean, group = group_code)) +
+  geom_point(size = 4, aes(color = GRDTYPE)) +
+  coord_flip() +
+  facet_grid(year~GRDTYPE)
+
+unique(approach_rate_df$year_code)
+```
+
+#### Test code
+
+
+```{r}
+raw_df %>% 
+  select(CAMPUS, GRDTYPE, dplyr::contains("AR042"))
+```
+
+```{r}
+raw_df %>% 
+  select(CAMPUS, GRDTYPE, dplyr::contains("AR01S"), dplyr::contains("AR010"))
+
+raw_df %>% 
+  
+  
+  
+```
+
+
+
+
+```{r}
+meet_df <- inner_join(numer, denom, by = c("CAMPUS", "GRDTYPE", "group_code", "subject_code", "year_code")) %>% 
+  select(CAMPUS, GRDTYPE, group_code:year_code, meet_students, total_students, -code.x, - code.y, -type_code.x, -type_code.y)
+meet_df %>%
+  mutate(meet_students = as.numeric(meet_students),
+         total_students = as.numeric(meet_students)) %>% 
+  group_by(GRDTYPE, group_code, subject_code, year_code) %>%
+  mutate(rate = meet_students/total_students)
+  
+```
+
+
+
+
+```{r}
+inner_join(denom, numer, by = c("campus", "grdtype", "group_code", "subject_code", "year_code"))
+```
+
+
+
+## Filter reading scores
+
+```{r}
+gather_df <- raw_df %>% 
+    gather(code, number_of_students, -CAMPUS, -GRDTYPE) %>% 
+    filter(!str_detect(code, "AR030"), !str_detect(code, "AR03A"), GRDTYPE != "B") %>% 
+    rename(campus = CAMPUS, grdtype = GRDTYPE) %>% 
+    mutate(group_code = substr(code, start = 1, stop = 4), # since the code is consistent
+           subject_code = substr(code, start = 5, stop = 9), # we can extract specific strings by location
+           year_code = paste0("20", substr(code, start = 10, stop = 11)), # from each of the areas of interest
+           type_code = substr(code, start = 12, stop = 12))
+```
+
+
+
+```{r}
+group_labels <- read_excel("unique_names.xlsx", sheet = 1)
+subject_labels <- read_excel("unique_names.xlsx", sheet = 2)
+type_labels <- read_excel("unique_names.xlsx", sheet = 4)
+```
+
+```{r}
+clean_df <- gather_df %>% 
+    left_join(group_labels, by = "group_code") %>% 
+    left_join(subject_labels, by = "subject_code") %>% 
+    left_join(type_labels, by = "type_code") %>% 
+    select(-code, -c(group_code:subject_code, type_code), year = year_code) %>% 
+    mutate_at(vars(grdtype, group_label, subject_label, type_label), factor) %>% 
+    mutate(number_of_students = as.numeric(number_of_students))
+```
