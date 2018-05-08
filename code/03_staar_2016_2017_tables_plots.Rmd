@@ -148,9 +148,13 @@ table_race <- left_join(approaching_table_race, meeting_table_race, by = c("Grad
            `Total Students taking STAAR.x`, -ends_with(".y")) %>% 
     rename(`Total Students taking STAAR` = `Total Students taking STAAR.x`, `Number of Districts` = `Number of Districts.x`)
 
+table_all <- left_join(table_race, table_group, by = c("Grade-type", "Year"))
+
 table_race %>% 
     kable(., "html", caption = "Table 1. STAAR Reading level by Race, Grade-type, and Year") %>% 
     kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+list(group = table_group, race = table_race, all = )
 ```
 
 
