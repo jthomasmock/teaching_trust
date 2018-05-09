@@ -1,6 +1,6 @@
 ---
 title: "04_Summary_Document_pdf"
-author: "Tom"
+author: "Thomas Mock"
 date: "May 9, 2018"
 output: pdf_document
 ---
@@ -46,13 +46,13 @@ I focused on splitting the data into race and groups (gender, special categories
 
 ```{r, echo = F}
 table_group %>% 
-    kable(., "latex", caption = "STAAR Reading level by Group, Grade-type, and Year") %>% 
+    kable(., "latex", caption = "STAAR Reading performance by Group, Grade-type, and Year") %>% 
     kable_styling(latex_options = c("striped", "scale_down"))
 ```
 
 ```{r, echo = F}
 table_race %>% 
-    kable(., "latex", caption = "STAAR Reading level by Race, Grade-type, and Year") %>% 
+    kable(., "latex", caption = "STAAR Reading performance by Race, Grade-type, and Year") %>% 
     kable_styling(latex_options = c("striped", "scale_down"))
 ```
 &nbsp;

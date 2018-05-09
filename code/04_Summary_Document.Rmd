@@ -1,9 +1,8 @@
 ---
 title: "Summary Document"
-author: "Tom"
+author: "Thomas Mock"
 date: "May 9, 2018"
 output:
-  pdf_document: default
   html_document: default
 ---
 
