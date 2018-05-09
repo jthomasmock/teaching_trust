@@ -28,6 +28,6 @@ Using the subset of Dallas ISD STAAR scores provided in the link above, download
 
 I have included .rmd and html outputs for all of the code used for this assignment, I uploaded everything to [GitHub](https://github.com/jthomasmock/teaching_trust) as well.  
 
-For the final output, I have an html and .pdf output titled "Final Submission Document".  
+For the final output, I have an [html](https://github.com/jthomasmock/teaching_trust/blob/master/Final%20Submission%20Document.html) and [.pdf](https://github.com/jthomasmock/teaching_trust/blob/master/Final%20Submission%20Document.pdf) output titled "Final Submission Document".  
 
 I have all the output data (tables, excel sheets, plots) attached as well, but the Final Submission Documents have all of the necessary assignment outputs.
