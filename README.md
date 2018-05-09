@@ -23,3 +23,11 @@ Using the subset of Dallas ISD STAAR scores provided in the link above, download
     * By race
 
 * Create at least one graph that illustrates the difference in the percentage of students approaching vs. meets reading scores by school type
+
+### Submission Requirements
+
+I have included .rmd and html outputs for all of the code used for this assignment, I uploaded everything to [GitHub](https://github.com/jthomasmock/teaching_trust) as well.  
+
+For the final output, I have an html and .pdf output titled "Final Submission Document".  
+
+I have all the output data (tables, excel sheets, plots) attached as well, but the Final Submission Documents have all of the necessary assignment outputs.

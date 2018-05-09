@@ -1,0 +1,107 @@
+---
+title: "04_Summary_Document_pdf"
+author: "Tom"
+date: "May 9, 2018"
+output: pdf_document
+---
+
+
+# Goals for project
+
+Calculate percentage of students whose **STAAR reading scores** are:  
+
+* Approaching grade level
+    * Overall
+    * By school type (Elementary, middle, high school)
+    * By gender
+    * By race
+* Meets grade level
+    * Overall
+    * By school type (E, M, S)
+    * By gender
+    * By race
+* Create at least one graph    
+
+
+## Summary of Wrangling
+
+I recoded negative values (-1 and -3) as well as "." as NA, since I assumed these were missing or otherwise incorrect data. I excluded gradetype == "B", as I was unsure what it was in relation to. The main issue with the data was it was in a non-tidy wide format, so I  `gathered` the data to convert to tall format. I then extracted out the various codes for race, group, gender, and gradetype as individual factors rather than a single combined factor. I also labeled these factors with more descriptive (eg CB00 = African American student). I `filtered` to only include Reading performance, and then `joined` the data back together into either meeting or approaching datasets. I converted all the student values (numerator, denominator, rate) to numbers and checked to make sure that Rate was equivalent to percentage. I then saved both an Excel and RDS output of the clean data for storage or use in summary calculations/graphing.
+
+\newpage
+
+
+```{r, echo = F, message=F, warning=F}
+library(tidyverse)
+library(kableExtra)
+library(here)
+```
+```{r, echo = F}
+table_df <- readRDS(here("/output_data/STAAR_16_17_reading_summary_tables.RDS"))
+table_group <- table_df$group
+table_race <- table_df$race
+```
+## Summary Tables
+
+I focused on splitting the data into race and groups (gender, special categories). I am presenting them here as those two tables but I also saved an additional table with ALL the data combined.
+
+```{r, echo = F}
+table_group %>% 
+    kable(., "latex", caption = "STAAR Reading level by Group, Grade-type, and Year") %>% 
+    kable_styling(latex_options = c("striped", "scale_down"))
+```
+
+```{r, echo = F}
+table_race %>% 
+    kable(., "latex", caption = "STAAR Reading level by Race, Grade-type, and Year") %>% 
+    kable_styling(latex_options = c("striped", "scale_down"))
+```
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+\newpage
+
+## Graphs
+
+I wanted to focus on examining the data by race, and specifically for the 4 most common groups (African american, asian, hispanic, and white). I plotted two graphs, one for meeting reading standards and one for approaching reading standards.
+
+&nbsp;
+
+```{r approaching, echo=FALSE, fig.cap="Fig. 1 2016-17 STAAR Reading performance approaching grade level standards by race", out.width = '100%'}
+knitr::include_graphics(here("/plots/approaching_gap.png"))
+```
+
+&nbsp;
+
+&nbsp;
+
+&nbsp;
+
+
+```{r meeting, echo=FALSE, fig.cap="Fig. 2 2016-17 STAAR Reading performance meeting grade level standards by race", out.width = '100%'}
+knitr::include_graphics(here("/plots/meeting_gap.png"))
+```
+
+\newpage
+
+## One thing I learned
+
+I really haven't had to do that many summary tables for my PhD, as we typically graph everything. So I wanted to end up with nice looking tables in a .rmd report as something to learn. I focused on the `kableExtra` package which is intended to create beautiful tables quickly and painlessly. I also appreciate the fact that there was a consistent coding scheme for the data, and although it is not how data is typically arranged in my world, it was done consistently and clearly!
+
+Additionally, at the beginning of the assignment I spent a lot of time digging through the coding system to make sure I understood how to break it up and not have to hardcode all the various combinations of groups/races/subject/year. I'm really pleased with the pseudo-database I formed that has the various groups assigned, as it saved me a lot of coding.
+
+## How did I fill gap?
+
+I really spent longer than expected making sure I understood some of the ways I would need to alter the raw data to appear nice in a table, so I dug through the documentation for `kableExtra` on GitHub as seen [here](https://haozhu233.github.io/kableExtra/awesome_table_in_html.html). I wanted to end up with a useful, clean, and attractive table, and this made it a lot easier. This required me renaming some of the variables so they had nice descriptive titles rather than simple snake-case titles.
+
+## 60-90 Min adequate?
+
+I definitely went over in time, I could have completed the assignment inside 90 minutes, but I spent an extra hour at the beginning planning out HOW I wanted to start the project, what I wanted to achieve and the most efficient way to do that. I also spent some extra time going back through the assignment and really making sure I felt comfortable passing it off to a colleague for them to understand what I was trying to do. All in it took me probably 2.5 hours to get through everything, not including time to read through the `kableExtra` documentation further.
+
+
+I really enjoyed working through this project, and I like that y'all provided take-home assignments!
+

@@ -32,6 +32,7 @@ library(writexl)
 library(ggalt)
 library(kableExtra)
 library(hrbrthemes)
+library(ggpubr)
 ```
 
 ## Read in data
@@ -148,19 +149,33 @@ table_race <- left_join(approaching_table_race, meeting_table_race, by = c("Grad
            `Total Students taking STAAR.x`, -ends_with(".y")) %>% 
     rename(`Total Students taking STAAR` = `Total Students taking STAAR.x`, `Number of Districts` = `Number of Districts.x`)
 
-table_all <- left_join(table_race, table_group, by = c("Grade-type", "Year"))
-
 table_race %>% 
-    kable(., "html", caption = "Table 1. STAAR Reading level by Race, Grade-type, and Year") %>% 
+    kable(., "html", caption = "Table 2. STAAR Reading level by Race, Grade-type, and Year") %>% 
     kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
 
-list(group = table_group, race = table_race, all = )
+table_all <- left_join(table_race, table_group, by = c("Grade-type", "Year"))
+
+table_all %>% 
+    kable(., "html", caption = "Table 3. STAAR Reading level by Race, Group, Grade-type, and Year") %>% 
+    kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
 ```
 
-
-
+## Save data to Excel and as RDS file
 
 ```{r}
+list(group = table_group, race = table_race, all = table_all) %>% 
+    saveRDS(here("/output_data/STAAR_16_17_reading_summary_tables.RDS"))
+# RDS files
+list(approaching = approaching_summary, meeting = meeting_summary) %>% 
+    writexl::write_xlsx(here("/output_data/STAAR_16_17_reading_summary_tables.xlsx"))
+```
+
+### Making graphs
+
+My goal is to graph Racial Achievement gap by percent approaching and percent meeting. I will be focusing on asian, african american, hispanic, and white students as they make up the majority of the students and we have complete data for them.
+
+```{r}
+# trial plots, high level overview
 ggplot(approaching_summary, aes(x = fct_reorder(group_code, percent_approaching), y = percent_approaching)) +
     geom_col() +
     coord_flip() +
@@ -176,34 +191,67 @@ ggplot(meeting_summary, aes(x = fct_reorder(group_code, percent_meeting), y = pe
     scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2)) +
     labs(x = "", 
          y = "\nMeeting Grade Level for Reading (%)",
-         title = "There is a distinct achievement gap for ")
+         title = "Racial achievement Gap")
     
 ```
 
 ```{r}
-ggplot(filter(approaching_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian")), aes(x = year_code, y = percent_approaching, color = group_code, group = group_code)) +
+# Trial plot
+ggplot(filter(approaching_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian")), 
+       aes(x = year_code, y = percent_approaching, color = group_code, group = group_code)) +
     geom_path() +
     geom_point(size = 3) +
     facet_grid(~gradetype) +
     scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), limits = c(0, 1)) +
     labs(x = "", 
          y = "\nMeeting Grade Level for Reading (%)",
-         title = "There is a distinct achievement gap for ")
+         title = "Racial Achievement gap")
 
 levels(meeting_df$group_code)
 
 ```
 
 ```{r}
-ggplot(filter(meeting_summary, as.character(group_code) %in% c("African American", "White", "Hispanic", "Asian", "Two or More Races")), aes(x = year_code, y = percent_meeting, color = group_code, group = group_code)) +
+# create the approaching grade standards plot for racial groups (excluding Native American and Pacific Islanders)
+# as there is unavailable data or simply no students
+(approaching_gap_plot <- ggplot(filter(approaching_summary, group_code %in% c("African American", "White", "Hispanic", "Asian")), 
+                                aes(x = year_code, y = percent_approaching, color = group_code, group = group_code)) +
+    geom_path() +
+    geom_point(size = 3) +
+    facet_grid(~gradetype) +
+    scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), limits = c(0, 1)) +
+    labs(x = "", 
+         y = "\nApproaching Grade Level for Reading (%)",
+         title = "There is a distinct achievement gap in students approaching reading standards\nbetween White/Asian students compared to Hispanic/African American students",
+         caption = "Data Source: Teaching Trust") +
+    hrbrthemes::theme_ipsum_rc() +
+    scale_color_ipsum() +
+    theme(legend.title = element_blank(),
+          legend.position = "top",
+          strip.text = element_text(hjust = .5, size = 12),
+          axis.title.y = element_text(vjust = .5, size = 14, face = "bold")))
+
+(meeting_gap_plot <- ggplot(filter(meeting_summary, group_code %in% c("African American", "White", "Hispanic", "Asian")), 
+                            aes(x = year_code, y = percent_meeting, color = group_code, group = group_code)) +
     geom_path() +
     geom_point(size = 3) +
     facet_grid(~gradetype) +
     scale_y_continuous(labels = scales::percent, breaks = seq(0, 1, 0.2), limits = c(0, 1)) +
     labs(x = "", 
          y = "\nMeeting Grade Level for Reading (%)",
-         title = "There is a distinct achievement gap for ") +
-    ggthemes::theme_fivethirtyeight() +
-    scale_color_ipsum()
+         title = "There is a distinct achievement gap in students meeting reading standards\nbetween White/Asian students compared to Hispanic/African American students",
+         caption = "Data Source: Teaching Trust") +
+    hrbrthemes::theme_ipsum_rc() +
+    scale_color_ipsum() +
+    theme(legend.title = element_blank(),
+          legend.position = "top",
+          strip.text = element_text(hjust = .5, size = 12),
+          axis.title.y = element_text(vjust = .5, size = 14, face = "bold")))
+```
+
+# Save plots at a quality level
+```{r}
+ggsave(here("plots/meeting_gap.png"), meeting_gap_plot, width = 10, height = 8, units = "in", dpi = 1000)
+ggsave(here("plots/approaching_gap.png"), approaching_gap_plot, width = 10, height = 8, units = "in", dpi = 1000)
 ```
 

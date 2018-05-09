@@ -36,7 +36,7 @@ From looking at the dataset on Google Drive, we can see that it is rectangular b
 
 ```{r}
 # read in raw data
-raw_df <- read_excel(here("raw_data/teach_trust.xlsx"))
+raw_df <- read_excel(here::here("raw_data/teach_trust.xlsx"))
 
 # take a "look" at the data -- SUPER wide
 head(raw_df)
@@ -100,11 +100,11 @@ code_check <- list(grp = group_code, sub = subject_code, yr = year_code, type = 
 check_output <- map(code_check, count_function)
 check_output
 
-
+# export unique factor names to start database (saved full database as code_database.xlsx)
 check_output %>% 
     map(., unique) %>%
     map(., data.frame) %>% 
-    writexl::write_xlsx("unique_names.xlsx")
+    writexl::write_xlsx(here::here("/output_data/unique_names.xlsx"))
 
 ```
 
@@ -117,7 +117,7 @@ AR01016 and AR01017 = D Index 1 - approaching totals, but 3-11 for 16 and 3-12 f
 
 I'm going to assume that since both are index 1 and have almost identical coding that they should reflect the same thing, even though there is a year by year difference in which grades are recorded.
 
-You could always hard-code the labels (as done below), but for reproducibility, I have ouput the labels so we can form a "database" of subject codes. This could get also rolled up into a package or be stored in database. I then attached the "labels" to match up with the code from STAAR data/website. For the sake of this assignment, I will be using these hard-coded labels as some of the grouping characteristics present in the dataset are not present in the codebook provided.
+You could always hard-code the labels (as done below), but for reproducibility, I have ouput the labels so we can form a "database" of subject codes. This could get also rolled up into a package or be stored in database. I then attached the "labels" to match up with the code from STAAR data/website. For the sake of this assignment, I could use these hard-coded labels as some of the grouping characteristics present in the dataset are not present in the codebook provided.
 
 ```{r}
 unique(group_code)
